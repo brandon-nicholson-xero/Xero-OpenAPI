@@ -1,0 +1,1263 @@
+openapi: 3.0.0
+info:
+  version: 19.1.0
+  title: Xero Account Data API
+  description: |
+    **Beta:** this API is in beta. Endpoints, request parameters and response shapes may change before general availability.
+
+    The Account Data API provides read access to general ledger account data for a Xero organisation: account balances as at a date, account movements over a date range, and the individual account transactions behind them.
+  termsOfService: https://developer.xero.com/xero-developer-platform-terms-conditions/
+  contact:
+    name: Xero Platform Team
+    email: api@xero.com
+    url: https://developer.xero.com
+  license:
+    name: MIT
+    url: https://github.com/XeroAPI/Xero-OpenAPI/blob/master/LICENSE
+servers:
+  - description: Xero Account Data API base url
+    url: https://api.xero.com/accountdata.xro/1.0
+paths:
+  /account-balances:
+    get:
+      tags:
+        - Account Balances
+      operationId: getAccountBalances
+      summary: Get the balance of each general ledger account as at a given date
+      description: |
+        Retrieves account balances as at `date`, optionally including balances for one or
+        more prior comparison periods, and optionally filtered by account class, type,
+        account IDs, system account code, or tracking item.
+
+        ### Filtering
+
+        - Filter by `class`, `type`, `accountIds`, and/or `systemAccountCodes`. These can be
+          combined freely — when more than one is supplied, the server returns only accounts
+          that match **all** of the supplied filters (an intersection, not a union).
+        - Filtering `type` by `INVENTORY` matches inventory asset accounts, regardless of the
+          account's underlying account type.
+        - `trackingItemIds` and `unassignedToTrackingCategoryIds` can be used independently of
+          the filters above to further narrow which accounts are returned.
+
+        ### Comparison periods
+
+        - Supplying `comparisonPeriodCount` together with `comparisonPeriodSize` returns
+          additional balances at prior points in time, in addition to the balance at `date`.
+        - Each comparison date is calculated by moving back `comparisonPeriodSize` from the
+          previous date, `comparisonPeriodCount` times. For `MONTH`, `QUARTER`, and `YEAR`
+          sizes, a `date` that falls on the last day of its month keeps landing on the last
+          day of the shifted month (so comparisons across February behave correctly).
+        - `comparisonPeriodCount` and `comparisonPeriodSize` must be supplied together.
+
+        ### Bank accounts
+
+        Requests that would return bank account balances require the caller to have bank
+        account view permission for the organisation. If the caller lacks this permission and
+        explicitly requests bank accounts (directly by `accountIds`, or via `type=BANK`, or an
+        unfiltered request), the call is rejected with `403 Forbidden`.
+
+        ### Pagination
+
+        This endpoint does not paginate — the full set of matching account balances is
+        returned in a single response.
+      parameters:
+        - name: accountingBasis
+          in: query
+          required: true
+          description: Accounting basis for the balance calculation.
+          schema:
+            type: string
+            enum:
+              - ACCRUAL
+              - CASH
+          example: ACCRUAL
+        - name: date
+          in: query
+          required: true
+          description: |
+            The date to calculate account balances as at, in ISO 8601 format (YYYY-MM-DD).
+          schema:
+            type: string
+            format: date
+          example: '2024-12-31'
+        - name: comparisonPeriodCount
+          in: query
+          required: false
+          description: |
+            Number of additional comparison balances to return, each one further back in
+            time than the last. Must be supplied together with `comparisonPeriodSize`.
+
+            - **Minimum**: 1
+            - **Maximum**: 100
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+          example: 3
+        - name: comparisonPeriodSize
+          in: query
+          required: false
+          description: |
+            The unit of time each comparison period steps back by. Must be supplied
+            together with `comparisonPeriodCount`.
+          schema:
+            type: string
+            enum:
+              - DAY
+              - WEEK
+              - MONTH
+              - QUARTER
+              - YEAR
+          example: MONTH
+        - name: accountIds
+          in: query
+          required: false
+          description: |
+            Filter to specific account IDs (GUIDs). Repeat the parameter for multiple
+            accounts.
+
+            - **Maximum**: 50 account IDs
+            - **Validation**: Returns 404 if any ID does not exist for the organisation
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+            maxItems: 50
+          style: form
+          explode: true
+        - name: class
+          in: query
+          required: false
+          description: Account classes to filter by. Can be combined with other filters.
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - ASSET
+                - LIABILITY
+                - EQUITY
+                - REVENUE
+                - EXPENSE
+          style: form
+          explode: true
+        - name: type
+          in: query
+          required: false
+          description: |
+            Account types to filter by (e.g. `BANK`, `CURRENT`, etc). Use `INVENTORY` to
+            match inventory asset accounts, regardless of their underlying account type.
+            Can be combined with other filters.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: systemAccountCodes
+          in: query
+          required: false
+          description: |
+            System account codes to filter by (e.g. `RETAINEDEARNINGS`,
+            `UNREALISEDGAINS`). Can be combined with other filters.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: trackingItemIds
+          in: query
+          required: false
+          description: Filter to accounts assigned to any of the given tracking item IDs.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+        - name: unassignedToTrackingCategoryIds
+          in: query
+          required: false
+          description: |
+            Filter to accounts that are not assigned to any tracking option within the
+            given tracking category IDs.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/XeroTenantId'
+      responses:
+        '200':
+          description: Success - returns account balances as at `date`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountBalancesResponse'
+              example:
+                accountBalances:
+                  - accountId: 575bc777-f59f-47d1-a449-83dfbaf38770
+                    date: '2024-12-31'
+                    balance:
+                      value: 5230.0
+                      type: DEBIT
+                    signedBalance: 5230.0
+                    account:
+                      id: 575bc777-f59f-47d1-a449-83dfbaf38770
+                      code: '630'
+                      name: Inventory
+                      class: ASSET
+                      type: INVENTORY
+                      status: ACTIVE
+                      systemAccountCode: null
+        '400':
+          description: |
+            **Bad Request** - Invalid parameters.
+
+            Common causes:
+            - `comparisonPeriodCount` supplied without `comparisonPeriodSize` (or vice versa)
+            - `comparisonPeriodCount` outside the 1-100 range
+            - More than 50 `accountIds` specified
+            - Invalid date format (must be YYYY-MM-DD)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/validation-error
+                title: Validation Failed
+                status: 400
+                detail: '''comparisonPeriodCount'' must be provided together with ''comparisonPeriodSize''.'
+                instance: /accountdata.xro/1.0/account-balances
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '403':
+          description: |
+            **Forbidden** - The caller does not have permission to view bank account
+            balances requested by this call.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/forbidden
+                title: Forbidden
+                status: 403
+                detail: You do not have permission to view bank account balances for this organisation.
+        '404':
+          description: |
+            **Not Found** - One or more requested `accountIds` or `systemAccountCodes`
+            do not exist for this organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/errors/account-not-found
+                title: Account could not be found
+                status: 404
+                detail: One or more of the specified account IDs could not be found.
+                instance: /accountdata.xro/1.0/account-balances
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+        - OAuth2:
+            - accountdata.balances.read
+  /account-movements:
+    get:
+      tags:
+        - Account Movements
+      operationId: getAccountMovements
+      summary: Get the net movement of each general ledger account over a date range
+      description: |
+        Retrieves account movements between `startDate` and `endDate`, optionally
+        including movements for one or more prior comparison periods of the same length,
+        and optionally filtered by account class, type, account IDs, system account code,
+        or tracking item.
+
+        ### Filtering
+
+        - Filter by `class`, `type`, `accountIds`, and/or `systemAccountCodes`. These can be
+          combined freely — when more than one is supplied, the server returns only accounts
+          that match **all** of the supplied filters (an intersection, not a union).
+        - Filtering `type` by `INVENTORY` matches inventory asset accounts, regardless of the
+          account's underlying account type.
+        - `trackingItemIds` and `unassignedToTrackingCategoryIds` can be used independently of
+          the filters above to further narrow which accounts are returned.
+
+        ### Comparison periods
+
+        - Supplying `comparisonPeriodCount` together with `comparisonPeriodSize` returns
+          additional movements for prior date ranges of the same length, in addition to the
+          movement between `startDate` and `endDate`.
+        - Each comparison range is calculated by moving the primary range back by
+          `comparisonPeriodSize`, `comparisonPeriodCount` times. For `MONTH`, `QUARTER`, and
+          `YEAR` sizes, range boundaries that fall on the last day of a month keep landing on
+          the last day of the shifted month.
+        - `comparisonPeriodCount` and `comparisonPeriodSize` must be supplied together.
+        - The primary range and every comparison range must not overlap each other. A request
+          whose periods would overlap is rejected with `400 Bad Request`.
+
+        ### Bank accounts
+
+        Requests that would return bank account movements require the caller to have bank
+        account view permission for the organisation. If the caller lacks this permission and
+        explicitly requests bank accounts (directly by `accountIds`, or via `type=BANK`, or an
+        unfiltered request), the call is rejected with `403 Forbidden`.
+
+        ### Pagination
+
+        This endpoint does not paginate — the full set of matching account movements is
+        returned in a single response.
+      parameters:
+        - name: accountingBasis
+          in: query
+          required: true
+          description: Accounting basis for the movement calculation.
+          schema:
+            type: string
+            enum:
+              - ACCRUAL
+              - CASH
+          example: ACCRUAL
+        - name: startDate
+          in: query
+          required: true
+          description: Start date of the movement range, in ISO 8601 format (YYYY-MM-DD).
+          schema:
+            type: string
+            format: date
+          example: '2024-01-01'
+        - name: endDate
+          in: query
+          required: true
+          description: End date of the movement range, in ISO 8601 format (YYYY-MM-DD).
+          schema:
+            type: string
+            format: date
+          example: '2024-12-31'
+        - name: comparisonPeriodCount
+          in: query
+          required: false
+          description: |
+            Number of additional comparison movements to return, each covering a range
+            further back in time than the last. Must be supplied together with
+            `comparisonPeriodSize`.
+
+            - **Minimum**: 1
+            - **Maximum**: 100
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+          example: 3
+        - name: comparisonPeriodSize
+          in: query
+          required: false
+          description: |
+            The unit of time each comparison range steps back by. Must be supplied
+            together with `comparisonPeriodCount`.
+          schema:
+            type: string
+            enum:
+              - DAY
+              - WEEK
+              - MONTH
+              - QUARTER
+              - YEAR
+          example: MONTH
+        - name: accountIds
+          in: query
+          required: false
+          description: |
+            Filter to specific account IDs (GUIDs). Repeat the parameter for multiple
+            accounts.
+
+            - **Maximum**: 50 account IDs
+            - **Validation**: Returns 404 if any ID does not exist for the organisation
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+            maxItems: 50
+          style: form
+          explode: true
+        - name: class
+          in: query
+          required: false
+          description: Account classes to filter by. Can be combined with other filters.
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - ASSET
+                - LIABILITY
+                - EQUITY
+                - REVENUE
+                - EXPENSE
+          style: form
+          explode: true
+        - name: type
+          in: query
+          required: false
+          description: |
+            Account types to filter by (e.g. `BANK`, `CURRENT`, etc). Use `INVENTORY` to
+            match inventory asset accounts, regardless of their underlying account type.
+            Can be combined with other filters.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: systemAccountCodes
+          in: query
+          required: false
+          description: |
+            System account codes to filter by (e.g. `RETAINEDEARNINGS`,
+            `UNREALISEDGAINS`). Can be combined with other filters.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: trackingItemIds
+          in: query
+          required: false
+          description: Filter to accounts assigned to any of the given tracking item IDs.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+        - name: unassignedToTrackingCategoryIds
+          in: query
+          required: false
+          description: |
+            Filter to accounts that are not assigned to any tracking option within the
+            given tracking category IDs.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/XeroTenantId'
+      responses:
+        '200':
+          description: Success - returns account movements for the requested range(s).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountMovementsResponse'
+              example:
+                accountMovements:
+                  - accountId: 575bc777-f59f-47d1-a449-83dfbaf38770
+                    dateRange:
+                      startDate: '2024-01-01'
+                      endDate: '2024-12-31'
+                    debits: 1200.0
+                    credits: 300.0
+                    movement:
+                      value: 900.0
+                      type: DEBIT
+                    signedMovement: 900.0
+                    taxDebits: 120.0
+                    taxCredits: 30.0
+                    signedTaxMovement: 90.0
+                    account:
+                      id: 575bc777-f59f-47d1-a449-83dfbaf38770
+                      code: '630'
+                      name: Inventory
+                      class: ASSET
+                      type: INVENTORY
+                      status: ACTIVE
+                      systemAccountCode: null
+        '400':
+          description: |
+            **Bad Request** - Invalid parameters.
+
+            Common causes:
+            - `comparisonPeriodCount` supplied without `comparisonPeriodSize` (or vice versa)
+            - `comparisonPeriodCount` outside the 1-100 range
+            - The primary range and one or more comparison ranges overlap
+            - `startDate` after `endDate`
+            - More than 50 `accountIds` specified
+            - Invalid date format (must be YYYY-MM-DD)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              examples:
+                overlappingPeriods:
+                  summary: Overlapping comparison periods
+                  value:
+                    type: https://api.xero.com/validation-error
+                    title: Validation Failed
+                    status: 400
+                    detail: The requested comparison periods overlap. Adjust the date range, 'comparisonPeriodSize',
+                      or 'comparisonPeriodCount' so the periods do not overlap.
+                    instance: /accountdata.xro/1.0/account-movements
+                missingPair:
+                  summary: comparisonPeriodCount without comparisonPeriodSize
+                  value:
+                    type: https://api.xero.com/validation-error
+                    title: Validation Failed
+                    status: 400
+                    detail: '''comparisonPeriodCount'' must be provided together with ''comparisonPeriodSize''.'
+                    instance: /accountdata.xro/1.0/account-movements
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '403':
+          description: |
+            **Forbidden** - The caller does not have permission to view bank account
+            movements requested by this call.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/forbidden
+                title: Forbidden
+                status: 403
+                detail: You do not have permission to view bank account movements for this organisation.
+        '404':
+          description: |
+            **Not Found** - One or more requested `accountIds` or `systemAccountCodes`
+            do not exist for this organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/errors/account-not-found
+                title: Account could not be found
+                status: 404
+                detail: One or more of the specified account IDs could not be found.
+                instance: /accountdata.xro/1.0/account-movements
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+        - OAuth2:
+            - accountdata.movements.read
+  /account-transactions:
+    get:
+      tags:
+        - Account Transactions
+      operationId: getAccountTransactions
+      summary: Get general ledger account transactions between two dates, with pagination and filtering
+      description: |
+        Retrieves transactions posted between `startDate` and `endDate` (inclusive),
+        optionally filtered by account IDs, class, type, or system account code, with
+        cursor-based pagination for large result sets.
+
+        **First call:** omit `token`. Supply `accountingBasis`, `startDate`, and
+        `endDate` (all required), plus any optional filters.
+
+        **Continuation calls:** supply only `token`, taken from the previous response's
+        `pagination.links.next`. Do not send any other query parameters — they are
+        ignored if present, since the original request is captured by the token.
+
+        ### Pagination
+
+        - Results are returned in pages of 200 lines.
+        - Use `pagination.links.next` from the response to fetch the next page. Send only the
+          `token` query parameter on continuation requests — all other query parameters are
+          ignored on a continuation call, since the original request's parameters are already
+          captured by the token.
+        - The `token` value is an opaque string. Treat it as an opaque string only — do not
+          parse, modify, or construct it yourself. Tokens may expire.
+        - No `pagination.links.next` in the response means you've reached the last page.
+        - The API captures a consistent snapshot at the time of the first request (via
+          `maxJournalNumber`), so transactions added while you are paginating through a
+          result set won't appear partway through, and won't cause duplicates or gaps.
+
+        ### Filtering
+
+        - Filter by `accountIds`, `class`, `type`, and/or `systemAccountCodes`. These can be
+          combined freely — when more than one is supplied, the server returns only
+          transactions for accounts that match **all** of the supplied filters (an
+          intersection, not a union).
+        - Filtering `type` by `INVENTORY` matches inventory asset accounts, regardless of the
+          account's underlying account type.
+        - Use `systemAccountCodes=NONE` to match accounts that have no system account code.
+        - Filters are only read from the first request in a pagination sequence — see
+          Pagination above.
+      parameters:
+        - name: accountingBasis
+          in: query
+          required: false
+          description: |
+            Accounting basis for the transaction query. Required on the first call;
+            not used (and ignored) on continuation calls made with `token`.
+          schema:
+            type: string
+            enum:
+              - ACCRUAL
+              - CASH
+          example: ACCRUAL
+        - name: startDate
+          in: query
+          required: false
+          description: |
+            Start date in ISO 8601 format (YYYY-MM-DD). Required on the first call; not
+            used (and ignored) on continuation calls made with `token`.
+          schema:
+            type: string
+            format: date
+          example: '2024-01-01'
+        - name: endDate
+          in: query
+          required: false
+          description: |
+            End date in ISO 8601 format (YYYY-MM-DD). Required on the first call; not
+            used (and ignored) on continuation calls made with `token`.
+          schema:
+            type: string
+            format: date
+          example: '2024-12-31'
+        - name: accountIds
+          in: query
+          required: false
+          description: |
+            Filter to specific account IDs (GUIDs). Repeat the parameter for multiple
+            accounts. Only used on the first call.
+
+            - **Maximum**: 20 account IDs
+            - **Validation**: Returns 404 if any ID does not exist for the organisation
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+            maxItems: 20
+          style: form
+          explode: true
+        - name: class
+          in: query
+          required: false
+          description: |
+            Account classes to filter by. Can be combined with other filters. Only used
+            on the first call.
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - ASSET
+                - LIABILITY
+                - EQUITY
+                - REVENUE
+                - EXPENSE
+          style: form
+          explode: true
+        - name: type
+          in: query
+          required: false
+          description: |
+            Account types to filter by (e.g. `BANK`, `CURRENT`, etc). Use `INVENTORY` to
+            match inventory asset accounts, regardless of their underlying account type.
+            Can be combined with other filters. Only used on the first call.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: systemAccountCodes
+          in: query
+          required: false
+          description: |
+            System account codes to filter by (e.g. `RETAINEDEARNINGS`,
+            `UNREALISEDGAINS`). Use `NONE` to match accounts with no system account code.
+            Can be combined with other filters. Only used on the first call.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: include
+          in: query
+          required: false
+          description: |
+            Additional data to include in the response. Only used on the first call.
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - trackingCategories
+          style: form
+          explode: true
+          example:
+            - trackingCategories
+        - name: maxJournalNumber
+          in: query
+          required: false
+          description: |
+            Maximum journal number to include in results, for point-in-time queries. If
+            omitted, the server captures the current maximum journal number at the time
+            of the first request and reuses it for every subsequent page, so the whole
+            paginated result set is consistent as at the moment you started. Only used on
+            the first call.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+          example: 999999
+        - name: token
+          in: query
+          required: false
+          description: |
+            Continuation token from a previous response's `pagination.links.next`. When
+            present, all other query parameters are ignored. Opaque — do not parse,
+            modify, or construct it.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/XeroTenantId'
+      responses:
+        '200':
+          description: |
+            Success - returns account transactions with pagination.
+
+            - `lines`: transaction lines for this page (max 200)
+            - `pagination.links.next`: URL for the next page (omitted on the last page)
+            - `currencyCode`: organisation's base currency
+            - `maxJournalNumber`: the snapshot boundary used for pagination consistency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountTransactionsResponse'
+              examples:
+                firstPage:
+                  summary: First page with more data available
+                  value:
+                    currencyCode: USD
+                    maxJournalNumber: 546
+                    lines:
+                      - journalNumber: 546
+                        journalDate: '2024-12-31'
+                        description: Inventory Opening Balance
+                        account:
+                          id: 575bc777-f59f-47d1-a449-83dfbaf38770
+                          code: '630'
+                          name: Inventory
+                          class: ASSET
+                          type: INVENTORY
+                          status: ACTIVE
+                          systemAccountCode: null
+                        netAmount:
+                          value: 80.0
+                          type: CREDIT
+                        signedNetAmount: -80.0
+                        taxAmount:
+                          value: 0.0
+                          type: CREDIT
+                        signedTaxAmount: 0.0
+                        source:
+                          documentId: 3c0e6a9d-2b5f-4e7a-9d1c-7f8e6d5c4b3a
+                          documentType: PURCHASE_ORDER
+                          eventType: CREATE
+                          contactId: 8a7c9d2e-3b1f-4e5a-9c8d-7f6e5d4c3b2a
+                          contactName: Acme Supplies
+                          reference: PO-1042
+                        taxRate:
+                          code: OUTPUT
+                          name: GST on Sales
+                          percentage: 10.0
+                    pagination:
+                      pageSize: 200
+                      links:
+                        next: /accountdata.xro/1.0/account-transactions?token=eyJvcmdJZCI6ImIwNDRlNGVhLWEyOTAtNGYxMS04ZGY4LTQwMTc5ZGZhNmNhZSJ9
+                lastPage:
+                  summary: Last page (no next link)
+                  value:
+                    currencyCode: USD
+                    maxJournalNumber: 546
+                    lines:
+                      - journalNumber: 102
+                        journalDate: '2024-01-15'
+                        description: Initial Inventory Stock
+                        account:
+                          id: 575bc777-f59f-47d1-a449-83dfbaf38770
+                          code: '630'
+                          name: Inventory
+                          class: ASSET
+                          type: INVENTORY
+                          status: ACTIVE
+                          systemAccountCode: null
+                        netAmount:
+                          value: 5000.0
+                          type: DEBIT
+                        signedNetAmount: 5000.0
+                        taxAmount:
+                          value: 0.0
+                          type: DEBIT
+                        signedTaxAmount: 0.0
+                        source: null
+                        taxRate: null
+                    pagination:
+                      pageSize: 200
+        '400':
+          description: |
+            **Bad Request** - Invalid parameters.
+
+            Common causes:
+            - More than 20 `accountIds` specified
+            - Invalid date format (must be YYYY-MM-DD)
+            - `endDate` before `startDate`
+            - Invalid or expired `token`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              examples:
+                tooManyAccountIds:
+                  summary: Too many account IDs
+                  value:
+                    type: https://api.xero.com/validation-error
+                    title: Validation Failed
+                    status: 400
+                    detail: Maximum 20 accountIds allowed. You provided 25.
+                    instance: /accountdata.xro/1.0/account-transactions
+                invalidToken:
+                  summary: Invalid or expired continuation token
+                  value:
+                    type: https://api.xero.com/validation-error
+                    title: Validation Failed
+                    status: 400
+                    detail: The value for the 'token' parameter was invalid.
+                    instance: /accountdata.xro/1.0/account-transactions
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '403':
+          description: |
+            **Forbidden** - The caller does not have permission to view bank account
+            transactions requested by this call.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/forbidden
+                title: Forbidden
+                status: 403
+                detail: You do not have permission to view bank account transactions for this organisation.
+        '404':
+          description: |
+            **Not Found** - One or more requested `accountIds` do not exist for this
+            organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: https://api.xero.com/errors/account-not-found
+                title: Account could not be found
+                status: 404
+                detail: One or more of the specified account IDs could not be found.
+                instance: /accountdata.xro/1.0/account-transactions
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+        - OAuth2:
+            - accountdata.transactions.read
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: For more information visit https://developer.xero.com/documentation/oauth2/overview
+      flows:
+        authorizationCode:
+          authorizationUrl: https://login.xero.com/identity/connect/authorize
+          tokenUrl: https://identity.xero.com/connect/token
+          scopes:
+            accountdata.balances.read: Read general ledger account balances
+            accountdata.movements.read: Read general ledger account movements
+            accountdata.transactions.read: Read general ledger account transactions
+  parameters:
+    XeroTenantId:
+      name: Xero-Tenant-Id
+      in: header
+      required: true
+      description: The ID of the Xero organisation to query.
+      schema:
+        type: string
+        format: uuid
+      example: b044e4ea-a290-4f11-8df8-40179dfa6cae
+  responses:
+    Unauthorised:
+      description: Unauthorized - missing or invalid authentication token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.xero.com/unauthorized
+            title: Unauthorized
+            status: 401
+            detail: Valid authentication token required
+    TooManyRequests:
+      description: Too Many Requests - rate limit exceeded.
+      headers:
+        Retry-After:
+          description: Number of seconds to wait before retrying.
+          schema:
+            type: integer
+          example: 60
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.xero.com/rate-limit
+            title: Rate Limit Exceeded
+            status: 429
+            detail: Too many requests. Please retry after 60 seconds.
+    InternalError:
+      description: Internal Server Error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.xero.com/internal-error
+            title: Internal Server Error
+            status: 500
+            detail: An unexpected error occurred. Please try again later.
+  schemas:
+    AccountBalancesResponse:
+      type: object
+      required:
+        - accountBalances
+      properties:
+        accountBalances:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountBalance'
+    AccountBalance:
+      type: object
+      required:
+        - accountId
+        - date
+        - balance
+        - signedBalance
+        - account
+      properties:
+        accountId:
+          type: string
+          format: uuid
+          description: The account this balance is for.
+        date:
+          type: string
+          format: date
+          description: The date this balance applies to (YYYY-MM-DD).
+        balance:
+          $ref: '#/components/schemas/LedgerDecimal'
+        signedBalance:
+          type: number
+          format: double
+          description: Balance as a signed number (positive for debit, negative for credit).
+        account:
+          $ref: '#/components/schemas/Account'
+    Account:
+      type: object
+      required:
+        - id
+        - name
+        - class
+        - type
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+        name:
+          type: string
+        class:
+          type: string
+          enum:
+            - ASSET
+            - LIABILITY
+            - EQUITY
+            - REVENUE
+            - EXPENSE
+        type:
+          type: string
+          description: |
+            Account type (e.g. `BANK`, `CURRENT`). Reported as `INVENTORY` for inventory
+            asset accounts, regardless of the account's underlying type.
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - ARCHIVED
+        systemAccountCode:
+          type: string
+          nullable: true
+    LedgerDecimal:
+      type: object
+      required:
+        - value
+        - type
+      properties:
+        value:
+          type: number
+          format: double
+          description: Amount value (always positive).
+        type:
+          type: string
+          enum:
+            - DEBIT
+            - CREDIT
+    ProblemDetails:
+      type: object
+      description: RFC 7807 Problem Details for HTTP APIs.
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          description: URI reference identifying the problem type.
+        title:
+          type: string
+          description: Short, human-readable summary.
+        status:
+          type: integer
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Detailed explanation of the problem.
+        instance:
+          type: string
+          description: URI reference identifying the specific occurrence.
+    AccountMovementsResponse:
+      type: object
+      required:
+        - accountMovements
+      properties:
+        accountMovements:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountMovement'
+    AccountMovement:
+      type: object
+      required:
+        - accountId
+        - dateRange
+        - debits
+        - credits
+        - movement
+        - signedMovement
+        - account
+      properties:
+        accountId:
+          type: string
+          format: uuid
+          description: The account this movement is for.
+        dateRange:
+          $ref: '#/components/schemas/AccountingDateRange'
+        debits:
+          type: number
+          format: double
+          description: Total debits posted to this account within the date range.
+        credits:
+          type: number
+          format: double
+          description: Total credits posted to this account within the date range.
+        movement:
+          $ref: '#/components/schemas/LedgerDecimal'
+        signedMovement:
+          type: number
+          format: double
+          description: Movement as a signed number (positive for debit, negative for credit).
+        taxDebits:
+          type: number
+          format: double
+          nullable: true
+          description: Total tax debits within the date range.
+        taxCredits:
+          type: number
+          format: double
+          nullable: true
+          description: Total tax credits within the date range.
+        signedTaxMovement:
+          type: number
+          format: double
+          nullable: true
+          description: Tax movement as a signed number (positive for debit, negative for credit).
+        account:
+          $ref: '#/components/schemas/Account'
+    AccountingDateRange:
+      type: object
+      required:
+        - startDate
+        - endDate
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+    AccountTransactionsResponse:
+      type: object
+      required:
+        - currencyCode
+        - maxJournalNumber
+        - lines
+      properties:
+        currencyCode:
+          type: string
+          description: Organisation's base currency code (ISO 4217).
+          example: USD
+        maxJournalNumber:
+          type: integer
+          format: int64
+          description: |
+            Maximum journal number included in this result set. Captured at the first
+            request and held constant across all pages for consistency.
+          example: 546
+        lines:
+          type: array
+          description: Transaction lines for this page (max 200).
+          items:
+            $ref: '#/components/schemas/AccountTransactionLine'
+        pagination:
+          type: object
+          description: Pagination metadata. Omitted only if there are no results at all.
+          properties:
+            pageSize:
+              type: integer
+              format: int32
+              example: 200
+            links:
+              type: object
+              properties:
+                next:
+                  type: string
+                  description: URL for the next page. Omitted on the last page.
+    AccountTransactionLine:
+      type: object
+      required:
+        - journalNumber
+        - journalDate
+        - account
+        - netAmount
+      properties:
+        journalNumber:
+          type: integer
+          format: int64
+          description: Unique journal number for this transaction.
+        journalDate:
+          type: string
+          format: date
+          description: Accounting date of the transaction (YYYY-MM-DD).
+        description:
+          type: string
+          nullable: true
+        account:
+          $ref: '#/components/schemas/Account'
+        netAmount:
+          $ref: '#/components/schemas/LedgerDecimal'
+        signedNetAmount:
+          type: number
+          format: double
+          description: Net amount as a signed number (positive for debit, negative for credit).
+        taxAmount:
+          $ref: '#/components/schemas/LedgerDecimal'
+        signedTaxAmount:
+          type: number
+          format: double
+          description: Tax amount as a signed number (positive for debit, negative for credit).
+        source:
+          $ref: '#/components/schemas/LineSource'
+        taxRate:
+          $ref: '#/components/schemas/LineTaxRate'
+        trackingCategories:
+          type: object
+          nullable: true
+          description: |
+            Present only when `include=trackingCategories` was requested. Keys are
+            tracking category IDs (UUIDs); values describe the selected tracking option.
+          additionalProperties:
+            $ref: '#/components/schemas/TrackingItemDetails'
+    LineSource:
+      type: object
+      nullable: true
+      description: The originating document/event for this transaction line, if known.
+      properties:
+        documentId:
+          type: string
+          format: uuid
+          nullable: true
+        documentType:
+          type: string
+          nullable: true
+        eventType:
+          type: string
+          nullable: true
+        contactId:
+          type: string
+          format: uuid
+          nullable: true
+        contactName:
+          type: string
+          nullable: true
+        reference:
+          type: string
+          nullable: true
+    LineTaxRate:
+      type: object
+      nullable: true
+      description: The tax rate applied to this transaction line, if any.
+      properties:
+        code:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        percentage:
+          type: number
+          format: double
+          nullable: true
+    TrackingItemDetails:
+      type: object
+      required:
+        - categoryName
+        - optionId
+        - optionName
+      properties:
+        categoryName:
+          type: string
+        optionId:
+          type: string
+          format: uuid
+        optionName:
+          type: string
