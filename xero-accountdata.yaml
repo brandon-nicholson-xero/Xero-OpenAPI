@@ -34,8 +34,9 @@ paths:
         - Filter by `class`, `type`, `accountIds`, and/or `systemAccountCodes`. These can be
           combined freely — when more than one is supplied, the server returns only accounts
           that match **all** of the supplied filters (an intersection, not a union).
-        - Filtering `type` by `INVENTORY` matches inventory asset accounts, regardless of the
-          account's underlying account type.
+        - `type` values are matched case-sensitively, so use uppercase (for example `BANK`). Inventory
+          asset accounts are reported as, and can only be filtered by, `INVENTORY`; filtering by
+          their underlying account type does not match them.
         - `trackingItemIds` and `unassignedToTrackingCategoryIds` can be used independently of
           the filters above to further narrow which accounts are returned.
 
@@ -43,23 +44,32 @@ paths:
 
         - Supplying `comparisonPeriodCount` together with `comparisonPeriodSize` returns
           additional balances at prior points in time, in addition to the balance at `date`.
-        - Each comparison date is calculated by moving back `comparisonPeriodSize` from the
-          previous date, `comparisonPeriodCount` times. For `MONTH`, `QUARTER`, and `YEAR`
-          sizes, a `date` that falls on the last day of its month keeps landing on the last
-          day of the shifted month (so comparisons across February behave correctly).
+        - The n-th comparison date is `date` shifted back n times `comparisonPeriodSize`. For `MONTH`,
+          `QUARTER`, and `YEAR` sizes, a `date` that falls on the last day of its month keeps landing
+          on the last day of the shifted month (so comparisons across February behave correctly).
         - `comparisonPeriodCount` and `comparisonPeriodSize` must be supplied together.
 
         ### Bank accounts
 
-        Requests that would return bank account balances require the caller to have bank
-        account view permission for the organisation. If the caller lacks this permission and
-        explicitly requests bank accounts (directly by `accountIds`, or via `type=BANK`, or an
-        unfiltered request), the call is rejected with `403 Forbidden`.
+        Bank account data is only available to users with bank account view permission for the
+        organisation.
+
+        - If the request would include bank accounts and the user lacks this permission, it is
+          rejected with `403 Forbidden`. A request is treated as including bank accounts when it
+          has no account filters, filters by all five `class` values and nothing else, includes
+          `BANK` in `type`, or lists a bank account in `accountIds`.
+        - For other requests (for example `class=ASSET`), bank accounts are silently excluded from
+          the response for users without this permission, instead of the request being rejected.
+
+        ### Results
+
+        Only accounts with a non-zero balance at a given date are returned; accounts and comparison
+        dates with a net-zero balance are omitted, so the response can be empty.
 
         ### Pagination
 
-        This endpoint does not paginate — the full set of matching account balances is
-        returned in a single response.
+        This endpoint does not paginate — all matching account balances are returned in a single
+        response.
       parameters:
         - name: accountingBasis
           in: query
@@ -209,61 +219,46 @@ paths:
                       type: DEBIT
                     signedBalance: 5230.0
                     account:
-                      id: 575bc777-f59f-47d1-a449-83dfbaf38770
                       code: '630'
                       name: Inventory
                       class: ASSET
                       type: INVENTORY
                       status: ACTIVE
-                      systemAccountCode: null
+                      systemAccountCode: NONE
         '400':
           description: |
-            **Bad Request** - Invalid parameters.
+            **Bad Request** - The request failed validation. The body is a `ValidationProblem` with a
+            `fieldValidationErrors` array.
 
             Common causes:
+            - A required parameter (`accountingBasis`, `date`) is missing, or a value is not a valid date or enum value
             - `comparisonPeriodCount` supplied without `comparisonPeriodSize` (or vice versa)
             - `comparisonPeriodCount` outside the 1-100 range
             - More than 50 `accountIds` specified
-            - Invalid date format (must be YYYY-MM-DD)
+            - An empty value in `type` or `systemAccountCodes`
+            - The organisation is not active
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
-              example:
-                type: https://api.xero.com/validation-error
-                title: Validation Failed
-                status: 400
-                detail: '''comparisonPeriodCount'' must be provided together with ''comparisonPeriodSize''.'
-                instance: /accountdata.xro/1.0/account-balances
+                $ref: '#/components/schemas/ValidationProblem'
         '401':
           $ref: '#/components/responses/Unauthorised'
         '403':
           description: |
-            **Forbidden** - The caller does not have permission to view bank account
-            balances requested by this call.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-              example:
-                type: https://api.xero.com/forbidden
-                title: Forbidden
-                status: 403
-                detail: You do not have permission to view bank account balances for this organisation.
+            **Forbidden** - The caller is not permitted to make this request: either their role does not allow
+            reading account balances, or the request would include bank accounts and the user lacks bank account view
+            permission (see Bank accounts above). The service returns no response body.
         '404':
           description: |
-            **Not Found** - One or more requested `accountIds` or `systemAccountCodes`
-            do not exist for this organisation.
+            **Not Found** - One or more requested `accountIds` or `systemAccountCodes` do not exist for this organisation, or the organisation was not found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
-                type: https://api.xero.com/errors/account-not-found
-                title: Account could not be found
+                title: Not found
                 status: 404
-                detail: One or more of the specified account IDs could not be found.
-                instance: /accountdata.xro/1.0/account-balances
+                detail: Account not found.
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -288,8 +283,9 @@ paths:
         - Filter by `class`, `type`, `accountIds`, and/or `systemAccountCodes`. These can be
           combined freely — when more than one is supplied, the server returns only accounts
           that match **all** of the supplied filters (an intersection, not a union).
-        - Filtering `type` by `INVENTORY` matches inventory asset accounts, regardless of the
-          account's underlying account type.
+        - `type` values are matched case-sensitively, so use uppercase (for example `BANK`). Inventory
+          asset accounts are reported as, and can only be filtered by, `INVENTORY`; filtering by
+          their underlying account type does not match them.
         - `trackingItemIds` and `unassignedToTrackingCategoryIds` can be used independently of
           the filters above to further narrow which accounts are returned.
 
@@ -304,19 +300,31 @@ paths:
           the last day of the shifted month.
         - `comparisonPeriodCount` and `comparisonPeriodSize` must be supplied together.
         - The primary range and every comparison range must not overlap each other. A request
-          whose periods would overlap is rejected with `400 Bad Request`.
+          whose periods would overlap is rejected with `400 Bad Request`. Ranges that share a single boundary day count as
+          overlapping, which month-end adjustment can cause when shifting by `MONTH`, `QUARTER`, or
+          `YEAR`.
 
         ### Bank accounts
 
-        Requests that would return bank account movements require the caller to have bank
-        account view permission for the organisation. If the caller lacks this permission and
-        explicitly requests bank accounts (directly by `accountIds`, or via `type=BANK`, or an
-        unfiltered request), the call is rejected with `403 Forbidden`.
+        Bank account data is only available to users with bank account view permission for the
+        organisation.
+
+        - If the request would include bank accounts and the user lacks this permission, it is
+          rejected with `403 Forbidden`. A request is treated as including bank accounts when it
+          has no account filters, filters by all five `class` values and nothing else, includes
+          `BANK` in `type`, or lists a bank account in `accountIds`.
+        - For other requests (for example `class=ASSET`), bank accounts are silently excluded from
+          the response for users without this permission, instead of the request being rejected.
 
         ### Pagination
 
         This endpoint does not paginate — the full set of matching account movements is
         returned in a single response.
+
+        ### Results
+
+        Only combinations of account and date range with non-zero movement are returned; comparison
+        ranges are not zero-filled. The response is a flat list with no guaranteed ordering.
       parameters:
         - name: accountingBasis
           in: query
@@ -481,75 +489,48 @@ paths:
                     taxCredits: 30.0
                     signedTaxMovement: 90.0
                     account:
-                      id: 575bc777-f59f-47d1-a449-83dfbaf38770
                       code: '630'
                       name: Inventory
                       class: ASSET
                       type: INVENTORY
                       status: ACTIVE
-                      systemAccountCode: null
+                      systemAccountCode: NONE
         '400':
           description: |
-            **Bad Request** - Invalid parameters.
+            **Bad Request** - The request failed validation. The body is a `ValidationProblem` with a
+            `fieldValidationErrors` array.
 
             Common causes:
+            - A required parameter (`accountingBasis`, `startDate`, `endDate`) is missing, or a value is not a valid date or enum value
             - `comparisonPeriodCount` supplied without `comparisonPeriodSize` (or vice versa)
             - `comparisonPeriodCount` outside the 1-100 range
             - The primary range and one or more comparison ranges overlap
             - `startDate` after `endDate`
             - More than 50 `accountIds` specified
-            - Invalid date format (must be YYYY-MM-DD)
+            - An empty value in `type` or `systemAccountCodes`
+            - The organisation is not active
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
-              examples:
-                overlappingPeriods:
-                  summary: Overlapping comparison periods
-                  value:
-                    type: https://api.xero.com/validation-error
-                    title: Validation Failed
-                    status: 400
-                    detail: The requested comparison periods overlap. Adjust the date range, 'comparisonPeriodSize',
-                      or 'comparisonPeriodCount' so the periods do not overlap.
-                    instance: /accountdata.xro/1.0/account-movements
-                missingPair:
-                  summary: comparisonPeriodCount without comparisonPeriodSize
-                  value:
-                    type: https://api.xero.com/validation-error
-                    title: Validation Failed
-                    status: 400
-                    detail: '''comparisonPeriodCount'' must be provided together with ''comparisonPeriodSize''.'
-                    instance: /accountdata.xro/1.0/account-movements
+                $ref: '#/components/schemas/ValidationProblem'
         '401':
           $ref: '#/components/responses/Unauthorised'
         '403':
           description: |
-            **Forbidden** - The caller does not have permission to view bank account
-            movements requested by this call.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-              example:
-                type: https://api.xero.com/forbidden
-                title: Forbidden
-                status: 403
-                detail: You do not have permission to view bank account movements for this organisation.
+            **Forbidden** - The caller is not permitted to make this request: either their role does not allow
+            reading account movements, or the request would include bank accounts and the user lacks bank account view
+            permission (see Bank accounts above). The service returns no response body.
         '404':
           description: |
-            **Not Found** - One or more requested `accountIds` or `systemAccountCodes`
-            do not exist for this organisation.
+            **Not Found** - One or more requested `accountIds` or `systemAccountCodes` do not exist for this organisation, or the organisation was not found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
-                type: https://api.xero.com/errors/account-not-found
-                title: Account could not be found
+                title: Not found
                 status: 404
-                detail: One or more of the specified account IDs could not be found.
-                instance: /accountdata.xro/1.0/account-movements
+                detail: Account not found.
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -584,7 +565,7 @@ paths:
           captured by the token.
         - The `token` value is an opaque string. Treat it as an opaque string only — do not
           parse, modify, or construct it yourself. Tokens may expire.
-        - No `pagination.links.next` in the response means you've reached the last page.
+        - No `pagination.links.next` in the response means you've reached the last page, and `pagination` is `null`.
         - The API captures a consistent snapshot at the time of the first request (via
           `maxJournalNumber`), so transactions added while you are paginating through a
           result set won't appear partway through, and won't cause duplicates or gaps.
@@ -595,11 +576,22 @@ paths:
           combined freely — when more than one is supplied, the server returns only
           transactions for accounts that match **all** of the supplied filters (an
           intersection, not a union).
-        - Filtering `type` by `INVENTORY` matches inventory asset accounts, regardless of the
-          account's underlying account type.
+        - `type` values are matched case-sensitively, so use uppercase (for example `BANK`). Inventory
+          asset accounts are reported as, and can only be filtered by, `INVENTORY`; filtering by
+          their underlying account type does not match them.
         - Use `systemAccountCodes=NONE` to match accounts that have no system account code.
         - Filters are only read from the first request in a pagination sequence — see
           Pagination above.
+
+        ### Bank accounts
+
+        Bank account transactions are only available to users with bank account view permission for
+        the organisation.
+
+        - If the user lacks this permission and the request includes `BANK` in `type`, or lists a
+          bank account in `accountIds`, it is rejected with `403 Forbidden`.
+        - For all other requests, including unfiltered requests, bank account transactions are
+          silently excluded from the results for users without this permission.
       parameters:
         - name: accountingBasis
           in: query
@@ -648,6 +640,7 @@ paths:
               type: string
               format: uuid
             maxItems: 20
+            minItems: 1
           style: form
           explode: true
         - name: class
@@ -739,7 +732,7 @@ paths:
             Success - returns account transactions with pagination.
 
             - `lines`: transaction lines for this page (max 200)
-            - `pagination.links.next`: URL for the next page (omitted on the last page)
+            - `pagination.links.next`: URL for the next page (`pagination` is `null` on the last page)
             - `currencyCode`: organisation's base currency
             - `maxJournalNumber`: the snapshot boundary used for pagination consistency
           content:
@@ -763,7 +756,7 @@ paths:
                           class: ASSET
                           type: INVENTORY
                           status: ACTIVE
-                          systemAccountCode: null
+                          systemAccountCode: NONE
                         netAmount:
                           value: 80.0
                           type: CREDIT
@@ -803,7 +796,7 @@ paths:
                           class: ASSET
                           type: INVENTORY
                           status: ACTIVE
-                          systemAccountCode: null
+                          systemAccountCode: NONE
                         netAmount:
                           value: 5000.0
                           type: DEBIT
@@ -812,69 +805,54 @@ paths:
                           value: 0.0
                           type: DEBIT
                         signedTaxAmount: 0.0
-                        source: null
-                        taxRate: null
-                    pagination:
-                      pageSize: 200
+                        source:
+                          documentId: null
+                          documentType: null
+                          eventType: null
+                          contactId: null
+                          contactName: null
+                          reference: null
+                        taxRate:
+                          code: null
+                          name: null
+                          percentage: null
+                    pagination: null
         '400':
           description: |
-            **Bad Request** - Invalid parameters.
+            **Bad Request** - The request failed validation. The body is a `ValidationProblem` with a
+            `fieldValidationErrors` array.
 
             Common causes:
-            - More than 20 `accountIds` specified
-            - Invalid date format (must be YYYY-MM-DD)
+            - A required first-call parameter (`accountingBasis`, `startDate`, `endDate`) is missing, or a value is not a valid date or enum value
             - `endDate` before `startDate`
-            - Invalid or expired `token`
+            - More than 20, or no, `accountIds` specified
+            - An empty value in `type` or `systemAccountCodes`
+            - `include` has a value other than `trackingCategories`
+            - `maxJournalNumber` is negative
+            - Invalid `token`, or a `token` that is no longer valid
+            - The organisation is not active
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
-              examples:
-                tooManyAccountIds:
-                  summary: Too many account IDs
-                  value:
-                    type: https://api.xero.com/validation-error
-                    title: Validation Failed
-                    status: 400
-                    detail: Maximum 20 accountIds allowed. You provided 25.
-                    instance: /accountdata.xro/1.0/account-transactions
-                invalidToken:
-                  summary: Invalid or expired continuation token
-                  value:
-                    type: https://api.xero.com/validation-error
-                    title: Validation Failed
-                    status: 400
-                    detail: The value for the 'token' parameter was invalid.
-                    instance: /accountdata.xro/1.0/account-transactions
+                $ref: '#/components/schemas/ValidationProblem'
         '401':
           $ref: '#/components/responses/Unauthorised'
         '403':
           description: |
-            **Forbidden** - The caller does not have permission to view bank account
-            transactions requested by this call.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetails'
-              example:
-                type: https://api.xero.com/forbidden
-                title: Forbidden
-                status: 403
-                detail: You do not have permission to view bank account transactions for this organisation.
+            **Forbidden** - The caller is not permitted to make this request: either their role does not allow
+            reading account transactions, or the request would include bank accounts and the user lacks bank account view
+            permission (see Bank accounts above). The service returns no response body.
         '404':
           description: |
-            **Not Found** - One or more requested `accountIds` do not exist for this
-            organisation.
+            **Not Found** - One or more requested `accountIds` do not exist for this organisation, or the organisation was not found.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
-                type: https://api.xero.com/errors/account-not-found
                 title: Account could not be found
                 status: 404
                 detail: One or more of the specified account IDs could not be found.
-                instance: /accountdata.xro/1.0/account-transactions
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -983,15 +961,12 @@ components:
     Account:
       type: object
       required:
-        - id
         - name
         - class
         - type
         - status
+        - systemAccountCode
       properties:
-        id:
-          type: string
-          format: uuid
         code:
           type: string
           nullable: true
@@ -1017,7 +992,7 @@ components:
             - ARCHIVED
         systemAccountCode:
           type: string
-          nullable: true
+          description: System account code, or `NONE` if the account has no system account code.
     LedgerDecimal:
       type: object
       required:
@@ -1035,9 +1010,8 @@ components:
             - CREDIT
     ProblemDetails:
       type: object
-      description: RFC 7807 Problem Details for HTTP APIs.
+      description: Problem details for HTTP APIs, in the style of RFC 7807.
       required:
-        - type
         - title
         - status
       properties:
@@ -1099,18 +1073,18 @@ components:
         taxDebits:
           type: number
           format: double
-          nullable: true
-          description: Total tax debits within the date range.
+          description: Total tax debits within the date range. Omitted from the response when tax values
+            are not available.
         taxCredits:
           type: number
           format: double
-          nullable: true
-          description: Total tax credits within the date range.
+          description: Total tax credits within the date range. Omitted from the response when tax values
+            are not available.
         signedTaxMovement:
           type: number
           format: double
-          nullable: true
-          description: Tax movement as a signed number (positive for debit, negative for credit).
+          description: Tax movement as a signed number (positive for debit, negative for credit). Omitted
+            from the response when tax values are not available.
         account:
           $ref: '#/components/schemas/Account'
     AccountingDateRange:
@@ -1150,7 +1124,7 @@ components:
             $ref: '#/components/schemas/AccountTransactionLine'
         pagination:
           type: object
-          description: Pagination metadata. Omitted only if there are no results at all.
+          description: Pagination metadata. `null` on the last page, including when there are no results.
           properties:
             pageSize:
               type: integer
@@ -1162,6 +1136,12 @@ components:
                 next:
                   type: string
                   description: URL for the next page. Omitted on the last page.
+              required:
+                - next
+          nullable: true
+          required:
+            - pageSize
+            - links
     AccountTransactionLine:
       type: object
       required:
@@ -1169,6 +1149,9 @@ components:
         - journalDate
         - account
         - netAmount
+        - description
+        - source
+        - taxRate
       properties:
         journalNumber:
           type: integer
@@ -1180,9 +1163,9 @@ components:
           description: Accounting date of the transaction (YYYY-MM-DD).
         description:
           type: string
-          nullable: true
+          description: Line description, falling back to the journal narration. Empty if neither is set.
         account:
-          $ref: '#/components/schemas/Account'
+          $ref: '#/components/schemas/TransactionAccount'
         netAmount:
           $ref: '#/components/schemas/LedgerDecimal'
         signedNetAmount:
@@ -1209,8 +1192,8 @@ components:
             $ref: '#/components/schemas/TrackingItemDetails'
     LineSource:
       type: object
-      nullable: true
-      description: The originating document/event for this transaction line, if known.
+      description: The originating document/event for this transaction line. Always present; its fields
+        are null when the source is unknown.
       properties:
         documentId:
           type: string
@@ -1234,8 +1217,8 @@ components:
           nullable: true
     LineTaxRate:
       type: object
-      nullable: true
-      description: The tax rate applied to this transaction line, if any.
+      description: The tax rate applied to this transaction line. Always present; its fields are null
+        when no tax rate applies.
       properties:
         code:
           type: string
@@ -1261,3 +1244,88 @@ components:
           format: uuid
         optionName:
           type: string
+    TransactionAccount:
+      type: object
+      required:
+        - id
+        - name
+        - class
+        - type
+        - status
+        - systemAccountCode
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+        name:
+          type: string
+        class:
+          type: string
+          enum:
+            - ASSET
+            - LIABILITY
+            - EQUITY
+            - REVENUE
+            - EXPENSE
+        type:
+          type: string
+          description: |
+            Account type (e.g. `BANK`, `CURRENT`). Reported as `INVENTORY` for inventory
+            asset accounts, regardless of the account's underlying type.
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - ARCHIVED
+        systemAccountCode:
+          type: string
+          description: System account code, or `NONE` if the account has no system account code.
+    FieldProblem:
+      type: object
+      description: A single validation failure.
+      properties:
+        fieldName:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        status:
+          type: integer
+          format: int32
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+        instance:
+          type: string
+          nullable: true
+    ValidationProblem:
+      type: object
+      description: Returned with `400 Bad Request` when the request fails validation.
+      properties:
+        type:
+          type: string
+          description: URI reference identifying the problem type.
+        title:
+          type: string
+          description: Short, human-readable summary.
+        status:
+          type: integer
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Detailed explanation of the problem.
+        instance:
+          type: string
+          description: URI reference identifying the specific occurrence.
+        fieldValidationErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldProblem'
