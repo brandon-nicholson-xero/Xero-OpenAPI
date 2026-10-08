@@ -1288,10 +1288,10 @@ components:
           $ref: '#/components/schemas/LineTaxRate'
         trackingCategories:
           type: object
-          nullable: true
           description: |
-            Present only when `include=trackingCategories` was requested. Keys are
-            tracking category IDs (UUIDs); values describe the selected tracking option.
+            Present only when `include=trackingCategories` was requested, and omitted otherwise. Keys are
+            tracking category IDs (UUIDs); values describe the selected tracking option. The object is empty
+            when the line has no tracking.
           additionalProperties:
             $ref: '#/components/schemas/TrackingItemDetails'
     LineSource:
