@@ -241,21 +241,47 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                missingPair:
+                  summary: comparisonPeriodCount without comparisonPeriodSize
+                  value:
+                    fieldValidationErrors:
+                      - fieldName: ''
+                        type: http://common.service.xero.com/errors/field/value-unspecific-invalid
+                        detail: '''comparisonPeriodCount'' and ''comparisonPeriodSize'' must be provided
+                          together.'
+                    type: http://common.service.xero.com/errors/validation
+                    title: Invalid Request
+                    status: 400
+                    detail: "Validation errors:\r\n'comparisonPeriodCount' and 'comparisonPeriodSize'\
+                      \ must be provided together.\r\n"
         '401':
           $ref: '#/components/responses/Unauthorised'
         '403':
           description: |
-            **Forbidden** - The caller is not permitted to make this request: either their role does not allow
-            reading account balances, or the request would include bank accounts and the user lacks bank account view
-            permission (see Bank accounts above). The service returns no response body.
+            **Forbidden** - Returned by the gateway when `Xero-Tenant-Id` is missing, or the token is not authorised for that organisation (a `GatewayProblem` body).
+
+            The service also returns `403` with no response body when the user's role does not allow reading account balances, or when the request would include bank accounts and the user lacks bank account view permission (see Bank accounts above).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayProblem'
+              example:
+                Type: null
+                Title: Forbidden
+                Status: 403
+                Detail: AuthenticationUnsuccessful
+                Instance: c6bbb61b-1ee9-4671-bd5b-9d8d57df00d1
+                Extensions: {}
         '404':
           description: |
             **Not Found** - One or more requested `accountIds` or `systemAccountCodes` do not exist for this organisation, or the organisation was not found.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
+                type: https://ledger-query.service.xero.com/errors/action/not-found
                 title: Not found
                 status: 404
                 detail: Account not found.
@@ -513,21 +539,61 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                overlappingPeriods:
+                  summary: Overlapping comparison periods
+                  value:
+                    fieldValidationErrors:
+                      - fieldName: ''
+                        type: http://common.service.xero.com/errors/field/value-unspecific-invalid
+                        detail: The requested comparison periods overlap. Adjust the date range, 'comparisonPeriodSize',
+                          or 'comparisonPeriodCount' so the periods do not overlap.
+                    type: http://common.service.xero.com/errors/validation
+                    title: Invalid Request
+                    status: 400
+                    detail: "Validation errors:\r\nThe requested comparison periods overlap. Adjust the\
+                      \ date range, 'comparisonPeriodSize', or 'comparisonPeriodCount' so the periods\
+                      \ do not overlap.\r\n"
+                missingPair:
+                  summary: comparisonPeriodCount without comparisonPeriodSize
+                  value:
+                    fieldValidationErrors:
+                      - fieldName: ''
+                        type: http://common.service.xero.com/errors/field/value-unspecific-invalid
+                        detail: '''comparisonPeriodCount'' and ''comparisonPeriodSize'' must be provided
+                          together.'
+                    type: http://common.service.xero.com/errors/validation
+                    title: Invalid Request
+                    status: 400
+                    detail: "Validation errors:\r\n'comparisonPeriodCount' and 'comparisonPeriodSize'\
+                      \ must be provided together.\r\n"
         '401':
           $ref: '#/components/responses/Unauthorised'
         '403':
           description: |
-            **Forbidden** - The caller is not permitted to make this request: either their role does not allow
-            reading account movements, or the request would include bank accounts and the user lacks bank account view
-            permission (see Bank accounts above). The service returns no response body.
+            **Forbidden** - Returned by the gateway when `Xero-Tenant-Id` is missing, or the token is not authorised for that organisation (a `GatewayProblem` body).
+
+            The service also returns `403` with no response body when the user's role does not allow reading account movements, or when the request would include bank accounts and the user lacks bank account view permission (see Bank accounts above).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayProblem'
+              example:
+                Type: null
+                Title: Forbidden
+                Status: 403
+                Detail: AuthenticationUnsuccessful
+                Instance: c6bbb61b-1ee9-4671-bd5b-9d8d57df00d1
+                Extensions: {}
         '404':
           description: |
             **Not Found** - One or more requested `accountIds` or `systemAccountCodes` do not exist for this organisation, or the organisation was not found.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
+                type: https://ledger-query.service.xero.com/errors/action/not-found
                 title: Not found
                 status: 404
                 detail: Account not found.
@@ -835,21 +901,45 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ValidationProblem'
+              examples:
+                invalidToken:
+                  summary: Invalid continuation token
+                  value:
+                    fieldValidationErrors:
+                      - fieldName: token
+                        type: http://common.service.xero.com/errors/field/invalid-token
+                        detail: The value for the 'token' parameter was invalid.
+                    type: http://common.service.xero.com/errors/validation
+                    title: Invalid Request
+                    status: 400
+                    detail: "Validation errors:\r\nThe value for the 'token' parameter was invalid.\r\n"
         '401':
           $ref: '#/components/responses/Unauthorised'
         '403':
           description: |
-            **Forbidden** - The caller is not permitted to make this request: either their role does not allow
-            reading account transactions, or the request would include bank accounts and the user lacks bank account view
-            permission (see Bank accounts above). The service returns no response body.
+            **Forbidden** - Returned by the gateway when `Xero-Tenant-Id` is missing, or the token is not authorised for that organisation (a `GatewayProblem` body).
+
+            The service also returns `403` with no response body when the user's role does not allow reading account transactions, or when the request would include bank accounts and the user lacks bank account view permission (see Bank accounts above).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayProblem'
+              example:
+                Type: null
+                Title: Forbidden
+                Status: 403
+                Detail: AuthenticationUnsuccessful
+                Instance: c6bbb61b-1ee9-4671-bd5b-9d8d57df00d1
+                Extensions: {}
         '404':
           description: |
             **Not Found** - One or more requested `accountIds` do not exist for this organisation, or the organisation was not found.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
+                type: https://ledger-query.service.xero.com/errors/action/account-not-found
                 title: Account could not be found
                 status: 404
                 detail: One or more of the specified account IDs could not be found.
@@ -885,44 +975,68 @@ components:
       example: b044e4ea-a290-4f11-8df8-40179dfa6cae
   responses:
     Unauthorised:
-      description: Unauthorized - missing or invalid authentication token.
+      description: |
+        **Unauthorized** - Returned by the gateway when the access token is missing, invalid or expired (`Detail` is `AuthenticationUnsuccessful`), or does not include the scope this endpoint requires (`Detail` is `AuthorizationUnsuccessful` and `WWW-Authenticate` is `insufficient_scope`).
+      headers:
+        WWW-Authenticate:
+          description: '`Bearer`, or `insufficient_scope` when the token lacks the required scope.'
+          schema:
+            type: string
+        Xero-Correlation-Id:
+          description: The correlation ID of the request.
+          schema:
+            type: string
+            format: uuid
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ProblemDetails'
-          example:
-            type: https://api.xero.com/unauthorized
-            title: Unauthorized
-            status: 401
-            detail: Valid authentication token required
+            $ref: '#/components/schemas/GatewayProblem'
+          examples:
+            invalidToken:
+              summary: Missing, invalid or expired token
+              value:
+                Type: null
+                Title: Unauthorized
+                Status: 401
+                Detail: AuthenticationUnsuccessful
+                Instance: d4565502-8492-4406-9f14-8f4a4c8462cf
+                Extensions: {}
+            insufficientScope:
+              summary: Token lacks the required scope
+              value:
+                Type: null
+                Title: Unauthorized
+                Status: 401
+                Detail: AuthorizationUnsuccessful
+                Instance: 7014d105-6aa7-4600-8d7c-08a8d60ada66
+                Extensions: {}
     TooManyRequests:
-      description: Too Many Requests - rate limit exceeded.
+      description: |
+        **Too Many Requests** - Returned by the gateway when the app has exceeded a rate limit. The response has no body. Wait the number of seconds in `Retry-After` before retrying; `X-Rate-Limit-Problem` says which limit was exceeded (for example `day` for the daily limit).
       headers:
         Retry-After:
           description: Number of seconds to wait before retrying.
           schema:
             type: integer
-          example: 60
-      content:
-        application/json:
+          example: 33155
+        X-Rate-Limit-Problem:
+          description: The limit that was exceeded, for example `day`.
           schema:
-            $ref: '#/components/schemas/ProblemDetails'
-          example:
-            type: https://api.xero.com/rate-limit
-            title: Rate Limit Exceeded
-            status: 429
-            detail: Too many requests. Please retry after 60 seconds.
+            type: string
+          example: day
+        X-DayLimit-Remaining:
+          description: Calls remaining for the app and organisation today.
+          schema:
+            type: integer
+          example: 0
+        Xero-Correlation-Id:
+          description: The correlation ID of the request.
+          schema:
+            type: string
+            format: uuid
     InternalError:
-      description: Internal Server Error.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ProblemDetails'
-          example:
-            type: https://api.xero.com/internal-error
-            title: Internal Server Error
-            status: 500
-            detail: An unexpected error occurred. Please try again later.
+      description: |
+        **Internal Server Error** - An unexpected error occurred. The request can be retried. The response body is not guaranteed to follow a particular format.
   schemas:
     AccountBalancesResponse:
       type: object
@@ -1290,6 +1404,8 @@ components:
         fieldName:
           type: string
           nullable: true
+          description: The name of the offending parameter, or an empty string when the failure is not
+            tied to one parameter.
         type:
           type: string
           nullable: true
@@ -1329,3 +1445,28 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FieldProblem'
+    GatewayProblem:
+      type: object
+      required:
+        - Title
+        - Status
+      description: Error body produced by the Xero API gateway (authentication, authorisation and tenant
+        checks). Note the PascalCase property names.
+      properties:
+        Type:
+          type: string
+          nullable: true
+        Title:
+          type: string
+          example: Unauthorized
+        Status:
+          type: integer
+          format: int32
+        Detail:
+          type: string
+        Instance:
+          type: string
+          description: The correlation ID of the request, also returned in the `Xero-Correlation-Id` header.
+        Extensions:
+          type: object
+          additionalProperties: true
