@@ -247,10 +247,8 @@ paths:
                   value:
                     fieldValidationErrors:
                       - fieldName: ''
-                        type: http://common.service.xero.com/errors/field/value-unspecific-invalid
                         detail: '''comparisonPeriodCount'' and ''comparisonPeriodSize'' must be provided
                           together.'
-                    type: http://common.service.xero.com/errors/validation
                     title: Invalid Request
                     status: 400
                     detail: "Validation errors:\r\n'comparisonPeriodCount' and 'comparisonPeriodSize'\
@@ -281,7 +279,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
-                type: https://ledger-query.service.xero.com/errors/action/not-found
                 title: Not found
                 status: 404
                 detail: Account not found.
@@ -545,10 +542,8 @@ paths:
                   value:
                     fieldValidationErrors:
                       - fieldName: ''
-                        type: http://common.service.xero.com/errors/field/value-unspecific-invalid
                         detail: The requested comparison periods overlap. Adjust the date range, 'comparisonPeriodSize',
                           or 'comparisonPeriodCount' so the periods do not overlap.
-                    type: http://common.service.xero.com/errors/validation
                     title: Invalid Request
                     status: 400
                     detail: "Validation errors:\r\nThe requested comparison periods overlap. Adjust the\
@@ -559,10 +554,8 @@ paths:
                   value:
                     fieldValidationErrors:
                       - fieldName: ''
-                        type: http://common.service.xero.com/errors/field/value-unspecific-invalid
                         detail: '''comparisonPeriodCount'' and ''comparisonPeriodSize'' must be provided
                           together.'
-                    type: http://common.service.xero.com/errors/validation
                     title: Invalid Request
                     status: 400
                     detail: "Validation errors:\r\n'comparisonPeriodCount' and 'comparisonPeriodSize'\
@@ -593,7 +586,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
-                type: https://ledger-query.service.xero.com/errors/action/not-found
                 title: Not found
                 status: 404
                 detail: Account not found.
@@ -907,9 +899,7 @@ paths:
                   value:
                     fieldValidationErrors:
                       - fieldName: token
-                        type: http://common.service.xero.com/errors/field/invalid-token
                         detail: The value for the 'token' parameter was invalid.
-                    type: http://common.service.xero.com/errors/validation
                     title: Invalid Request
                     status: 400
                     detail: "Validation errors:\r\nThe value for the 'token' parameter was invalid.\r\n"
@@ -939,7 +929,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
               example:
-                type: https://ledger-query.service.xero.com/errors/action/account-not-found
                 title: Account could not be found
                 status: 404
                 detail: One or more of the specified account IDs could not be found.
@@ -1104,6 +1093,7 @@ components:
           enum:
             - ACTIVE
             - ARCHIVED
+            - DELETED
         systemAccountCode:
           type: string
           description: System account code, or `NONE` if the account has no system account code.
@@ -1394,6 +1384,7 @@ components:
           enum:
             - ACTIVE
             - ARCHIVED
+            - DELETED
         systemAccountCode:
           type: string
           description: System account code, or `NONE` if the account has no system account code.
